@@ -1,7 +1,7 @@
 import {createSlice, PayloadAction} from '@reduxjs/toolkit'
 import type {RootState} from '../MainStore'
 import {Metric} from "../services/MetricsService";
-import {CUT_DATE_WBH, DAY_MILLISECONDS, HOUR_MILLISECONDS} from "../../constants";
+import {CUT_DATE_WBH, DAY_MILLISECONDS, HOUR_MILLISECONDS, HOURS_THRESHOLD} from "../../constants";
 
 
 interface AdvancedMetric{
@@ -18,21 +18,27 @@ interface AdvancedMetric{
     RecordsStatus: number
 }
 
+interface Status {
+    Normals: number
+    Issues: number
+}
 
 interface MetricsCountry {
-    name: string
-    metrics:  AdvancedMetric[]
+    Name: string
+    Records: Status
+    Updates: Status
+    Metrics:  AdvancedMetric[]
 }
 
 export interface MetricsState {
-    countries: Map<string, MetricsCountry>
-    all: AdvancedMetric[]
+    Countries: Map<string, MetricsCountry>
+    All: AdvancedMetric[]
 }
 
 // Define the initial state using that type
 const initialState: MetricsState = {
-    countries: new Map<string, MetricsCountry>(),
-    all: []
+    Countries: new Map<string, MetricsCountry>(),
+    All: []
 }
 
 export const metricsSlice = createSlice({
@@ -40,8 +46,9 @@ export const metricsSlice = createSlice({
     initialState,
     reducers: {
         preCalculate: (state, action: PayloadAction<Metric[]>) => {
-            state.all = preCalculateMetrics(action.payload)
-            state.countries = sortByCountry(state.all);
+            state.All = preCalculateMetrics(action.payload)
+            const sorted = sortByCountry(state.All);
+            state.Countries = calculateCountryStatus(sorted);
         },
     },
 })
@@ -50,13 +57,11 @@ export const metricsSlice = createSlice({
 const preCalculateMetrics = (metrics: Metric[]):AdvancedMetric[]  => {
     //const res:AdvancedMetric[] = new Array(metrics.length);
     const now:Date = new Date();
-    const yesterday:Date = new Date();
-    yesterday.setDate(now.getDate()-1);
-    const standard:number = getStoredHours(yesterday)
+    now.setDate(now.getDate()-1)
     return metrics.map(metric => {
         const am = metricToAdvanceMetric(metric)
-        am.UpdateStatus = calculateUpdateStatus(now, am.LastUpdate)
-        am.RecordsStatus = calculateRecordsStatus(standard, am.RecordsClean)
+        am.UpdateStatus = calculateUpdateStatus(now, am.LastUpdate);
+        am.RecordsStatus = calculateRecordsStatus(am.LastUpdate, am.RecordsClean);
         return am
     });
 }
@@ -66,17 +71,40 @@ const sortByCountry = (metrics: AdvancedMetric[]):Map<string, MetricsCountry>  =
     //Sort By countries
     let metricsCountry: MetricsCountry;
     metrics.forEach((metric: AdvancedMetric) => {
-        if (!res.hasOwnProperty(metric.Country)) {
+        if (!res.has(metric.Country)) {
             metricsCountry = {} as MetricsCountry;
-            metricsCountry.name = metric.Country;
-            metricsCountry.metrics = [];
+            metricsCountry.Name = metric.Country;
+            metricsCountry.Metrics = [];
+            metricsCountry.Records = {Normals:0, Issues:0} as Status;
+            metricsCountry.Updates = {Normals:0, Issues:0} as Status;
             res.set(metric.Country, metricsCountry)
         } else {
             metricsCountry = res.get(metric.Country) as MetricsCountry
         }
-        metricsCountry.metrics.push(metric)
+        metricsCountry.Metrics.push(metric)
     })
+    console.log('metricsCountry', res)
     return res;
+}
+
+const calculateCountryStatus = (countries: Map<string, MetricsCountry>):Map<string, MetricsCountry> => {
+    countries.forEach((country) => {
+        country.Metrics.forEach(metric => {
+            const { RecordsStatus, UpdateStatus } = metric;
+            if (RecordsStatus === 0) {
+                country.Records.Normals++
+            } else {
+                country.Records.Issues++
+            }
+
+            if (UpdateStatus === 0) {
+                country.Updates.Normals++
+            } else {
+                country.Updates.Issues++
+            }
+        })
+    })
+    return countries;
 }
 
 const metricToAdvanceMetric = (metric: Metric):AdvancedMetric => {
@@ -96,21 +124,23 @@ const metricToAdvanceMetric = (metric: Metric):AdvancedMetric => {
 }
 
 const calculateUpdateStatus = (now:Date, update:Date):number => {
-    const days = Math.round((now.getTime() - update.getTime())/DAY_MILLISECONDS);
-    if (days > 20) return 20;
-    return days
+    const hours = Math.round((now.getTime() - update.getTime())/HOUR_MILLISECONDS);
+    if (hours < 0) return 1;
+    if (hours > HOURS_THRESHOLD) return HOURS_THRESHOLD;
+    return hours;
 }
 
-const calculateRecordsStatus = (standard:number, records:number):number => {
+const calculateRecordsStatus = (date:Date, records:number):number => {
+    const standard = getStoredHours(date)
     const gaps:number = standard - records;
     //console.log("standard", standard, 'records', records)
-    if (gaps > 20) return 20;
+    if (gaps > HOURS_THRESHOLD) return HOURS_THRESHOLD;
     return gaps
 }
 
-const getStoredHours = (time:Date):number => {
+const getStoredHours = (date:Date):number => {
     const start = new Date(CUT_DATE_WBH)
-    const delta = Math.abs( time.getTime() - start.getTime());
+    const delta = Math.abs( date.getTime() - start.getTime());
     return  Math.floor(delta / (HOUR_MILLISECONDS));
 
 
@@ -119,6 +149,6 @@ const getStoredHours = (time:Date):number => {
 export const { preCalculate } = metricsSlice.actions
 
 // Other code such as selectors can use the imported `RootState` type
-export const selectCount = (state: RootState) => state.metrics.countries
+export const selectCount = (state: RootState) => state.metrics.Countries
 
 export default metricsSlice.reducer

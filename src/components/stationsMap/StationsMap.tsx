@@ -10,8 +10,8 @@ let graph: MapD3 | undefined;
 
 export default function StationsMap() {
     const {data, error, isLoading} = useGetMetricsQuery('')
-    const countries = useAppSelector((state: RootState) => state.metrics.countries)
-    const all = useAppSelector((state: RootState) => state.metrics.all)
+    const countries = useAppSelector((state: RootState) => state.metrics.Countries)
+    const all = useAppSelector((state: RootState) => state.metrics.All)
     useEffect(() => {
         if (d3Ref) {
             graph = new MapD3(d3Ref.current);
@@ -23,11 +23,11 @@ export default function StationsMap() {
     }, []);
 
     useEffect(() => {
-        if (all && graph) {
-            graph.update(all);
+        if (countries && graph) {
+            graph.update(countries);
         }
 
-    },[all]);
+    },[countries]);
     return (
         <Row>
             <Col>
