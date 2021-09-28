@@ -23,17 +23,20 @@ export default function StationsMap() {
     }, []);
 
     useEffect(() => {
-        if (countries && graph) {
-            graph.update(countries);
+        if (countries && all && graph) {
+            graph.update(countries, all);
         }
 
-    },[countries]);
+    },[countries, all]);
     return (
         <Row>
             <Col>
                 <Row>
                     <Col>
-                        <svg ref={d3Ref} width="500" height="500"/>
+                        <svg ref={d3Ref}
+                             height="700"
+                             preserveAspectRatio="xMinYMin slice"
+                             width="100%"/>
                     </Col>
                 </Row>
                 <Row>

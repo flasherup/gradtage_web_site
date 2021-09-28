@@ -1,24 +1,25 @@
 import * as d3 from 'd3';
 import * as topojson from "topojson-client";
-import {HOURS_THRESHOLD} from "../../../constants";
 import versor from "versor";
+import {HOURS_ACCEPTABLE_GAP, HOURS_THRESHOLD} from "../../../constants";
+
+
+const SCALE_EXTENT = [1, 70];
 
 const COLOR_NORMAL = '#31C52E';
 const COLOR_ISSUE = '#C5402E';
 
+const SCALE_STATION_MODE = 3000;
+
 export default class MapD3 {
     constructor(parent) {
         this.parent = parent;
+        this.countryMode = true;
     }
 
     initialize() {
         const svg = d3.select(this.parent);
-        const width = +svg.attr("width");
-        const height = +svg.attr("height");
-        const projection = d3.geoOrthographic()
-            .scale(250)
-            .translate([width / 2, height / 2])
-            .clipExtent([[0,0],[width,height]]);
+        const projection = d3.geoOrthographic();
         const path = d3.geoPath(projection);
         const mapContainer = svg.append('g');
         const itemContainer = svg.append('g');
@@ -28,8 +29,6 @@ export default class MapD3 {
 
 
         this.svg = svg;
-        this.width = width;
-        this.height = height;
         this.projection = projection;
         this.mapContainer = mapContainer;
         this.itemContainer = itemContainer;
@@ -38,14 +37,27 @@ export default class MapD3 {
 
         d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
             .then(data => this.onCountryJSONReady(data));
+
+        this.updateSize();
+    }
+
+    updateSize() {
+        const width = this.parent.clientWidth;
+        const height = this.parent.clientHeight;
+
+        this.projection
+            .scale(250)
+            .translate([width / 2, height / 2])
+            .clipExtent([[0,0],[width,height]]);
+
+        this.width = width;
+        this.height = height;
     }
 
     onCountryJSONReady(data) {
         const {
             svg,
             path,
-            width,
-            height,
             mapContainer,
             projection,
         } = this;
@@ -69,17 +81,25 @@ export default class MapD3 {
             : projection._scale;
         svg
             .call(zoom(projection)
-                .on("zoom.render", () => this.render(countries)))
-            .call(() => this.render(countries))
+                .on("zoom.render", event => this.render(countries, event)))
+            .call(event => this.render(countries, event))
             .node();
 
         this.countries = countries;
         this.initialized = true;
-        if (this.data) this.drawCountries();
+        if (this.countriesRawData) this.drawCountries();
     }
 
-    render(countries) {
-        const { mapContainer, path, projection } = this;
+    render(countries, event) {
+        if (event.transform && event.transform.k > SCALE_STATION_MODE) {
+            if (this.countryMode) {
+                this.cleanCountries()
+            }
+            this.countryMode = false;
+        } else {
+            this.countryMode = true;
+        }
+        const { mapContainer, path, countriesData, stationsRawData } = this;
 
         if (!this.paths) this.paths = mapContainer.selectAll('path')
 
@@ -99,11 +119,16 @@ export default class MapD3 {
             .attr("class", "Country")
             .style("opacity", .8)
 
-        this.updateItems(this.countriesData);
+        if (this.countryMode) {
+            this.updateCountries(countriesData);
+        } else {
+            this.updateStations(stationsRawData);
+        }
     }
 
-    update(data) {
-        this.data = data;
+    update(countries, all) {
+        this.countriesRawData = countries;
+        this.stationsRawData = all;
         if (!this.initialized) {
             return
         }
@@ -112,11 +137,11 @@ export default class MapD3 {
     }
 
     drawCountries() {
-        const {countries, path, data} = this;
+        const {countries, countriesRawData} = this;
         const features = countries.features;
         const countriesData = [];
         features.forEach( (feature) => {
-            const d = data.get(feature.properties.name)
+            const d = countriesRawData.get(feature.properties.name)
             if (d) {
                 const c = d3.geoCentroid(feature)
                 countriesData.push({
@@ -129,15 +154,15 @@ export default class MapD3 {
         });
 
         this.countriesData = countriesData;
-        this.updateItems(countriesData);
+        this.updateCountries(countriesData);
     }
 
-    updateItems(data) {
+    updateCountries(data) {
         const { itemContainer, projection} = this;
         if (!data) return;
-        if (!this.items) this.items = itemContainer.selectAll(".country");
+        if (!this.countryItems) this.countryItems = itemContainer.selectAll(".country");
         const filtered = data.filter(tester(projection));
-        this.items = this.items.data(filtered)
+        this.countryItems = this.countryItems.data(filtered)
             .join(
                 enter => {
                     enter.append('g')
@@ -147,6 +172,34 @@ export default class MapD3 {
                 },
                 update => {
                     update.call((selection)=>processCountryItem(selection, projection))
+                },
+                exit => {
+                    exit
+                        .remove();
+                }
+            )
+    }
+
+    cleanCountries() {
+        this.itemContainer.selectAll(".country").remove();
+        this.stationItems = null;
+    }
+
+    updateStations(data) {
+        const { itemContainer, projection} = this;
+        if (!data) return;
+        if (!this.stationItems) this.stationItems = itemContainer.selectAll(".country");
+        const filtered = data.filter(tester(projection));
+        this.stationItems = this.stationItems.data(filtered)
+            .join(
+                enter => {
+                    enter.append('g')
+                        .attr("class", d=>{
+                            return "country";
+                        }).call((selection)=>processStationItem(selection, projection))
+                },
+                update => {
+                    update.call((selection)=>processStationItem(selection, projection))
                 },
                 exit => {
                     exit
@@ -167,7 +220,7 @@ const processCountryItem = (selection, projection) => {
 
     const arc = d3.arc()
         .innerRadius(4)
-        .outerRadius(8);
+        .outerRadius(10);
 
     selection
         .attr('transform', d => translate(d,projection));
@@ -181,13 +234,18 @@ const processCountryItem = (selection, projection) => {
             .append('g')
             .attr("class", 'pie-chart')
             .append('circle')
-            .attr('class', 'background')
-            .attr('r', 10)
-            .attr('fill', '#FFFFFF')
-            .attr('stroke', '#446380')
-            .attr('stroke-width', 2);
+            .attr('class', 'background');
+
 
          const pieChart = node.selectAll('.pie-chart').data([data]);
+
+         const haveIssues = data.Raw.Updates.Issues > 0
+
+        pieChart.select('.background')
+            .attr('r', 4)
+            .attr('fill', haveIssues ? COLOR_ISSUE : COLOR_NORMAL)
+            .attr('stroke', '#FFFFFF')
+            .attr('stroke-width', 2);
 
          const pieData = pie([data.Raw.Records.Normals, data.Raw.Records.Issues])
 
@@ -199,16 +257,14 @@ const processCountryItem = (selection, projection) => {
                         .append("path")
                         .attr("class", "arc")
                         .attr("fill", (d, i) => {
-                            const color = i===0?COLOR_NORMAL:COLOR_ISSUE;
-                            return color;
+                            return i === 0 ? COLOR_NORMAL : COLOR_ISSUE;
                         })
                         .attr("d", arc)
                 },
                 update => {
                     update
                         .attr("fill", (d, i) => {
-                            const color = i===0?COLOR_NORMAL:COLOR_ISSUE;
-                            return color;
+                            return i === 0 ? COLOR_NORMAL : COLOR_ISSUE;
                         })
                         .attr("d", arc)
                 },
@@ -219,6 +275,44 @@ const processCountryItem = (selection, projection) => {
             )
     })
     return selection;
+}
+
+const processStationItem = (selection, projection) => {
+    selection
+        .attr('transform', d => translate(d,projection));
+
+
+
+    selection.each((data, i, nodes) => {
+        //const haveIssues = (data.RecordsStatus > 0);
+        const haveIssues = (data.RecordsStatus > 0 || data.UpdateStatus > HOURS_ACCEPTABLE_GAP);
+        const node = d3.select(nodes[i]);
+        node.selectAll('.pie-chart')
+            .data([data])
+            .enter()
+            .append('g')
+            .attr("class", 'pie-chart')
+            .append('circle')
+            .attr('class', 'background')
+
+        const pieChart = node.selectAll('.pie-chart').data([data]);
+        pieChart.select('.background')
+            .attr('r', () => haveIssues ? 10 : 5)
+            .attr('fill', haveIssues ? COLOR_ISSUE : COLOR_NORMAL)
+            .attr('stroke', '#446380')
+            .attr('stroke-width', 2);
+    });
+
+    return selection;
+}
+
+const MAX_GAPS = 100;
+const getRecordsIssuePercent = gaps => {
+    if (gaps >= MAX_GAPS) {
+        return 1;
+    }
+
+    return gaps/MAX_GAPS;
 }
 
 const translate = (item, projection) => {
@@ -232,11 +326,10 @@ function zoom(projection) {
         ? (projection._scale = projection.scale())
         : projection._scale;
 
-    const scaleExtent = [0.8, 8]
     let v0, q0, r0, a0, tl;
 
     const zoom = d3.zoom()
-        .scaleExtent(scaleExtent.map(x => x * scale))
+        .scaleExtent(SCALE_EXTENT.map(x => x * scale))
         .on("start", zoomstarted)
         .on("zoom", zoomed);
 

@@ -1,7 +1,13 @@
 import {createSlice, PayloadAction} from '@reduxjs/toolkit'
 import type {RootState} from '../MainStore'
 import {Metric} from "../services/MetricsService";
-import {CUT_DATE_WBH, DAY_MILLISECONDS, HOUR_MILLISECONDS, HOURS_THRESHOLD} from "../../constants";
+import {
+    CUT_DATE_WBH,
+    DAY_MILLISECONDS,
+    HOUR_MILLISECONDS,
+    HOURS_ACCEPTABLE_GAP,
+    HOURS_THRESHOLD
+} from "../../constants";
 
 
 interface AdvancedMetric{
@@ -97,7 +103,7 @@ const calculateCountryStatus = (countries: Map<string, MetricsCountry>):Map<stri
                 country.Records.Issues++
             }
 
-            if (UpdateStatus === 0) {
+            if (UpdateStatus < HOURS_ACCEPTABLE_GAP) {
                 country.Updates.Normals++
             } else {
                 country.Updates.Issues++
@@ -142,8 +148,6 @@ const getStoredHours = (date:Date):number => {
     const start = new Date(CUT_DATE_WBH)
     const delta = Math.abs( date.getTime() - start.getTime());
     return  Math.floor(delta / (HOUR_MILLISECONDS));
-
-
 }
 
 export const { preCalculate } = metricsSlice.actions
