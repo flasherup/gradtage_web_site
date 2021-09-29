@@ -1,0 +1,23 @@
+.tooltip-background {
+    fill: aliceblue;
+    stroke: #aebbc6;
+}
+
+.tooltip-title {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: bold;
+    fill: #6d78b4;
+}
+
+.tooltip-item-title {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+    font-size: 14px;
+    fill: #707ab3;
+}
+
+.tooltip-item-value {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+    font-size: 14px;
+    fill: #6d78b4;
+}

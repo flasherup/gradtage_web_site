@@ -1,8 +1,10 @@
 import * as d3 from 'd3';
-import * as topojson from "topojson-client";
-import versor from "versor";
-import {HOURS_ACCEPTABLE_GAP, HOURS_THRESHOLD} from "../../../constants";
-
+import * as topojson from 'topojson-client';
+import versor from 'versor';
+import Tooltip, {TYPE_STATION, TYPE_COUNTRY} from './elements/Tooltip'
+import {HOURS_THRESHOLD} from '../../../constants';
+import Country from "./elements/Country";
+import Station from "./elements/Station";
 
 const SCALE_EXTENT = [1, 70];
 
@@ -11,33 +13,37 @@ const COLOR_ISSUE = '#C5402E';
 
 const SCALE_STATION_MODE = 3000;
 
+const TOOLTIP_WIDTH = 300;
+const TOOLTIP_HEIGHT = 150;
+
 export default class MapD3 {
     constructor(parent) {
         this.parent = parent;
         this.countryMode = true;
+        this.countryIcons = new Map();
+        this.stationIcons = new Map();
     }
 
     initialize() {
         const svg = d3.select(this.parent);
         const projection = d3.geoOrthographic();
         const path = d3.geoPath(projection);
-        const mapContainer = svg.append('g');
-        const itemContainer = svg.append('g');
-
         const scaleColor = d3.scaleLinear().domain([0, HOURS_THRESHOLD])
             .range([COLOR_NORMAL, COLOR_ISSUE])
 
 
         this.svg = svg;
         this.projection = projection;
-        this.mapContainer = mapContainer;
-        this.itemContainer = itemContainer;
+        this.mapContainer = svg.append('g');
+        this.itemContainer = svg.append('g');
+        this.tooltipContainer = svg.append('g');
         this.path = path;
         this.scaleColor = scaleColor;
 
         d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
             .then(data => this.onCountryJSONReady(data));
 
+        this.tooltip = new Tooltip(this.tooltipContainer, TOOLTIP_WIDTH, TOOLTIP_HEIGHT);
         this.updateSize();
     }
 
@@ -50,8 +56,21 @@ export default class MapD3 {
             .translate([width / 2, height / 2])
             .clipExtent([[0,0],[width,height]]);
 
+        this.tooltip.setPosition(width-TOOLTIP_WIDTH-2, height-TOOLTIP_HEIGHT-2);
+
         this.width = width;
         this.height = height;
+    }
+
+
+
+    showTooltip(data, type) {
+        const { tooltip } = this;
+        tooltip.update(data, type);
+    }
+
+    hideTooltip(type) {
+        //tooltip.update(data, TYPE_COUNTRY);
     }
 
     onCountryJSONReady(data) {
@@ -75,10 +94,6 @@ export default class MapD3 {
             .attr("class", "Country")
             .style("opacity", .8)
 
-        const extraSpace = 10;
-        const scale = projection._scale === undefined
-            ? (projection._scale = projection.scale())
-            : projection._scale;
         svg
             .call(zoom(projection)
                 .on("zoom.render", event => this.render(countries, event)))
@@ -97,6 +112,9 @@ export default class MapD3 {
             }
             this.countryMode = false;
         } else {
+            if (!this.countryMode) {
+                this.cleanStations()
+            }
             this.countryMode = true;
         }
         const { mapContainer, path, countriesData, stationsRawData } = this;
@@ -157,55 +175,75 @@ export default class MapD3 {
         this.updateCountries(countriesData);
     }
 
+    onMouseOver(event, data, type) {
+        this.showTooltip(data, type);
+    }
+
+    onMouseOut(event, data, type) {
+        this.hideTooltip(type);
+    }
+
+    onMouseClick(event, data, type) {
+
+    }
+
     updateCountries(data) {
-        const { itemContainer, projection} = this;
         if (!data) return;
-        if (!this.countryItems) this.countryItems = itemContainer.selectAll(".country");
+
+        const { itemContainer, projection, countryIcons} = this;
         const filtered = data.filter(tester(projection));
-        this.countryItems = this.countryItems.data(filtered)
-            .join(
-                enter => {
-                    enter.append('g')
-                        .attr("class", d=>{
-                            return "country";
-                        }).call((selection)=>processCountryItem(selection, projection))
-                },
-                update => {
-                    update.call((selection)=>processCountryItem(selection, projection))
-                },
-                exit => {
-                    exit
-                        .remove();
-                }
-            )
+        const save = new Map();
+        filtered.forEach(country=>{
+            let icon = countryIcons.get(country.Name);
+            save.set(country.Name, true);
+            if (!icon) {
+                icon = new Country(
+                    itemContainer,
+                    10,
+                    10,
+                    (event, data)=>this.onMouseOver(event, data, TYPE_COUNTRY),
+                    (event, data)=>this.onMouseOut(event, data, TYPE_COUNTRY)
+                );
+                countryIcons.set(country.Name, icon);
+            }
+
+            icon.update(country);
+            icon.transform(translate(country,projection));
+        });
+        this.countryIcons = cleanIcons(countryIcons, save);
     }
 
     cleanCountries() {
-        this.itemContainer.selectAll(".country").remove();
-        this.stationItems = null;
+        this.countryIcons = cleanIcons(this.countryIcons)
     }
 
     updateStations(data) {
-        const { itemContainer, projection} = this;
         if (!data) return;
-        if (!this.stationItems) this.stationItems = itemContainer.selectAll(".country");
+        const { itemContainer, projection, stationIcons} = this;
         const filtered = data.filter(tester(projection));
-        this.stationItems = this.stationItems.data(filtered)
-            .join(
-                enter => {
-                    enter.append('g')
-                        .attr("class", d=>{
-                            return "country";
-                        }).call((selection)=>processStationItem(selection, projection))
-                },
-                update => {
-                    update.call((selection)=>processStationItem(selection, projection))
-                },
-                exit => {
-                    exit
-                        .remove();
-                }
-            )
+        const save = new Map();
+        filtered.forEach(station=>{
+            let icon = stationIcons.get(station.Name);
+            save.set(station.Name, true);
+            if (!icon) {
+                icon = new Station(
+                    itemContainer,
+                    10,
+                    10,
+                    (event, data)=>this.onMouseOver(event, data, TYPE_STATION),
+                    (event, data)=>this.onMouseOut(event, data, TYPE_STATION)
+                );
+                stationIcons.set(station.Name, icon);
+            }
+
+            icon.update(station);
+            icon.transform(translate(station,projection));
+        });
+        this.stationIcons = cleanIcons(stationIcons, save);
+    }
+
+    cleanStations() {
+        this.stationIcons = cleanIcons(this.stationIcons)
     }
 
     dispose() {
@@ -213,106 +251,15 @@ export default class MapD3 {
     }
 }
 
-const processCountryItem = (selection, projection) => {
-// Compute the position of each group on the pie:
-
-    const pie = d3.pie()
-
-    const arc = d3.arc()
-        .innerRadius(4)
-        .outerRadius(10);
-
-    selection
-        .attr('transform', d => translate(d,projection));
-
-
-    selection.each((data, i, nodes) => {
-        const node = d3.select(nodes[i]);
-        node.selectAll('.pie-chart')
-            .data([data])
-            .enter()
-            .append('g')
-            .attr("class", 'pie-chart')
-            .append('circle')
-            .attr('class', 'background');
-
-
-         const pieChart = node.selectAll('.pie-chart').data([data]);
-
-         const haveIssues = data.Raw.Updates.Issues > 0
-
-        pieChart.select('.background')
-            .attr('r', 4)
-            .attr('fill', haveIssues ? COLOR_ISSUE : COLOR_NORMAL)
-            .attr('stroke', '#FFFFFF')
-            .attr('stroke-width', 2);
-
-         const pieData = pie([data.Raw.Records.Normals, data.Raw.Records.Issues])
-
-        pieChart.selectAll('.arc')
-            .data(pieData)
-            .join(
-                enter => {
-                    enter
-                        .append("path")
-                        .attr("class", "arc")
-                        .attr("fill", (d, i) => {
-                            return i === 0 ? COLOR_NORMAL : COLOR_ISSUE;
-                        })
-                        .attr("d", arc)
-                },
-                update => {
-                    update
-                        .attr("fill", (d, i) => {
-                            return i === 0 ? COLOR_NORMAL : COLOR_ISSUE;
-                        })
-                        .attr("d", arc)
-                },
-                exit => {
-                    exit
-                        .remove();
-                }
-            )
-    })
-    return selection;
-}
-
-const processStationItem = (selection, projection) => {
-    selection
-        .attr('transform', d => translate(d,projection));
-
-
-
-    selection.each((data, i, nodes) => {
-        //const haveIssues = (data.RecordsStatus > 0);
-        const haveIssues = (data.RecordsStatus > 0 || data.UpdateStatus > HOURS_ACCEPTABLE_GAP);
-        const node = d3.select(nodes[i]);
-        node.selectAll('.pie-chart')
-            .data([data])
-            .enter()
-            .append('g')
-            .attr("class", 'pie-chart')
-            .append('circle')
-            .attr('class', 'background')
-
-        const pieChart = node.selectAll('.pie-chart').data([data]);
-        pieChart.select('.background')
-            .attr('r', () => haveIssues ? 10 : 5)
-            .attr('fill', haveIssues ? COLOR_ISSUE : COLOR_NORMAL)
-            .attr('stroke', '#446380')
-            .attr('stroke-width', 2);
+const cleanIcons = (list, save) => {
+    list.forEach((icon, key) => {
+        if (!save || !save.has(key)) {
+            icon.dispose();
+            list.delete(key);
+        }
     });
 
-    return selection;
-}
-
-const MAX_GAPS = 100;
-const getRecordsIssuePercent = gaps => {
-    if (gaps >= MAX_GAPS) {
-        return 1;
-    }
-
-    return gaps/MAX_GAPS;
+    return list;
 }
 
 const translate = (item, projection) => {

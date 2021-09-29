@@ -48,7 +48,6 @@ export default function StationsMap() {
                         ) : data ? (
                             <>
                                 <h3>{data.status}</h3>
-                                <p>{data.response[0].Country}</p>
                             </>
                         ) : null}
                     </Col>
