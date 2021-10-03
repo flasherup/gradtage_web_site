@@ -15,22 +15,12 @@ export default class Station {
     }
 
     initialize() {
-        const { parent, width, height } = this;
-        const radius = Math.min(width, height);
+        const { parent } = this;
         const station = parent
             .append('g')
             .attr('class', 'station-container');
 
-        const pie = d3.pie()
-
-        const arc = d3.arc()
-            .innerRadius((radius-2)/2)
-            .outerRadius(radius-2);
-
         this.station = station;
-        this.pie = pie;
-        this.arc = arc;
-        this.radius = radius;
     }
 
     update(data) {
@@ -39,17 +29,17 @@ export default class Station {
         const { station } = this;
         const haveIssues = (data.RecordsStatus > 0 || data.UpdateStatus > HOURS_ACCEPTABLE_GAP);
 
-        station.selectAll('.station-pie')
+        station.selectAll('.station-icon')
             .data([data])
             .enter()
             .append('g')
-            .attr("class", 'station-pie')
+            .attr("class", 'station-icon')
             .append('circle')
             .attr('class', 'station-background')
             .on('mouseover', (d,i)=>this.onOver(d,i))
             .on('mouseout', (d,i)=>this.onOut(d,i))
 
-        const pieChart = station.selectAll('.station-pie').data([data]);
+        const pieChart = station.selectAll('.station-icon').data([data]);
         pieChart.select('.station-background')
             .attr('r', () => haveIssues ? 10 : 5)
             .attr('fill', haveIssues ? COLOR_ISSUE : COLOR_NORMAL)

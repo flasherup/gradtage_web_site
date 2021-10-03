@@ -5,6 +5,7 @@ import Tooltip, {TYPE_STATION, TYPE_COUNTRY} from './elements/Tooltip'
 import {HOURS_THRESHOLD} from '../../../constants';
 import Country from "./elements/Country";
 import Station from "./elements/Station";
+import ItemsBuffer from "./utils/ItemsBuffer";
 
 const SCALE_EXTENT = [1, 70];
 
@@ -20,8 +21,6 @@ export default class MapD3 {
     constructor(parent) {
         this.parent = parent;
         this.countryMode = true;
-        this.countryIcons = new Map();
-        this.stationIcons = new Map();
     }
 
     initialize() {
@@ -45,6 +44,7 @@ export default class MapD3 {
 
         this.tooltip = new Tooltip(this.tooltipContainer, TOOLTIP_WIDTH, TOOLTIP_HEIGHT);
         this.updateSize();
+        this.initializeItemBuffers()
     }
 
     updateSize() {
@@ -60,6 +60,33 @@ export default class MapD3 {
 
         this.width = width;
         this.height = height;
+    }
+
+    initializeItemBuffers() {
+        const { itemContainer } = this;
+        this.countriesBuffer = new ItemsBuffer(
+            ()=>{
+                return new Country(
+                    itemContainer,
+                    10,
+                    10,
+                    (event, data)=>this.onMouseOver(event, data, TYPE_COUNTRY),
+                    (event, data)=>this.onMouseOut(event, data, TYPE_COUNTRY)
+                );
+            }
+        );
+
+        this.stationsBuffer = new ItemsBuffer(
+            ()=>{
+                return new Station(
+                    itemContainer,
+                    10,
+                    10,
+                    (event, data)=>this.onMouseOver(event, data, TYPE_STATION),
+                    (event, data)=>this.onMouseOut(event, data, TYPE_STATION)
+                );
+            }
+        );
     }
 
 
@@ -102,7 +129,7 @@ export default class MapD3 {
 
         this.countries = countries;
         this.initialized = true;
-        if (this.countriesRawData) this.drawCountries();
+        if (this.countriesRawData) this.setupCountries();
     }
 
     render(countries, event) {
@@ -151,10 +178,10 @@ export default class MapD3 {
             return
         }
 
-        this.drawCountries();
+        this.setupCountries();
     }
 
-    drawCountries() {
+    setupCountries() {
         const {countries, countriesRawData} = this;
         const features = countries.features;
         const countriesData = [];
@@ -189,37 +216,42 @@ export default class MapD3 {
 
     updateCountries(data) {
         if (!data) return;
-
-        const { itemContainer, projection, countryIcons} = this;
+        const { countriesBuffer, projection } = this;
         const filtered = data.filter(tester(projection));
-        const save = new Map();
+        const {buffer, thresh} = countriesBuffer.update(filtered, 'Name');
         filtered.forEach(country=>{
-            let icon = countryIcons.get(country.Name);
-            save.set(country.Name, true);
-            if (!icon) {
-                icon = new Country(
-                    itemContainer,
-                    10,
-                    10,
-                    (event, data)=>this.onMouseOver(event, data, TYPE_COUNTRY),
-                    (event, data)=>this.onMouseOut(event, data, TYPE_COUNTRY)
-                );
-                countryIcons.set(country.Name, icon);
-            }
-
+            const icon = buffer.get(country.Name);
             icon.update(country);
             icon.transform(translate(country,projection));
         });
-        this.countryIcons = cleanIcons(countryIcons, save);
+
+        thresh.forEach(icon=> {
+            icon.dispose();
+        })
     }
 
     cleanCountries() {
-        this.countryIcons = cleanIcons(this.countryIcons)
+        const thresh = this.countriesBuffer.clean();
+        thresh.forEach(icon=> {
+            icon.dispose();
+        })
     }
 
     updateStations(data) {
         if (!data) return;
-        const { itemContainer, projection, stationIcons} = this;
+        const { stationsBuffer, projection } = this;
+        const filtered = data.filter(tester(projection));
+        const {buffer, thresh} = stationsBuffer.update(filtered, 'StationId');
+        filtered.forEach(station=>{
+            const icon = buffer.get(station.StationId);
+            icon.update(station);
+            icon.transform(translate(station,projection));
+        });
+
+        thresh.forEach(icon=> {
+            icon.dispose();
+        })
+        /*const { itemContainer, projection, stationIcons} = this;
         const filtered = data.filter(tester(projection));
         const save = new Map();
         filtered.forEach(station=>{
@@ -239,11 +271,14 @@ export default class MapD3 {
             icon.update(station);
             icon.transform(translate(station,projection));
         });
-        this.stationIcons = cleanIcons(stationIcons, save);
+        this.stationIcons = cleanIcons(stationIcons, save);*/
     }
 
     cleanStations() {
-        this.stationIcons = cleanIcons(this.stationIcons)
+        const thresh = this.stationsBuffer.clean();
+        thresh.forEach(icon=> {
+            icon.dispose();
+        })
     }
 
     dispose() {
