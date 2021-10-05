@@ -7,12 +7,12 @@ import Country from "./elements/Country";
 import Station from "./elements/Station";
 import ItemsBuffer from "./utils/ItemsBuffer";
 
-const SCALE_EXTENT = [1, 70];
+const SCALE_EXTENT = [1, 100];
 
 const COLOR_NORMAL = '#31C52E';
 const COLOR_ISSUE = '#C5402E';
 
-const SCALE_STATION_MODE = 3000;
+const SCALE_STATION_MODE = 4000;
 
 const TOOLTIP_WIDTH = 300;
 const TOOLTIP_HEIGHT = 150;
@@ -129,7 +129,7 @@ export default class MapD3 {
 
         this.countries = countries;
         this.initialized = true;
-        if (this.countriesRawData) this.setupCountries();
+        if (this.countriesRawData) this.updateCountries(this.countriesRawData);
     }
 
     render(countries, event) {
@@ -144,7 +144,7 @@ export default class MapD3 {
             }
             this.countryMode = true;
         }
-        const { mapContainer, path, countriesData, stationsRawData } = this;
+        const { mapContainer, path, countriesRawData, stationsRawData } = this;
 
         if (!this.paths) this.paths = mapContainer.selectAll('path')
 
@@ -165,23 +165,25 @@ export default class MapD3 {
             .style("opacity", .8)
 
         if (this.countryMode) {
-            this.updateCountries(countriesData);
+            this.updateCountries(countriesRawData);
         } else {
             this.updateStations(stationsRawData);
         }
     }
 
-    update(countries, all) {
+    update(countries, all, flags) {
+        this.flags = flags;
         this.countriesRawData = countries;
         this.stationsRawData = all;
         if (!this.initialized) {
             return
         }
 
-        this.setupCountries();
+        //this.setupCountries();
+        this.updateCountries(this.countriesRawData);
     }
 
-    setupCountries() {
+    /*setupCountries() {
         const {countries, countriesRawData} = this;
         const features = countries.features;
         const countriesData = [];
@@ -200,7 +202,7 @@ export default class MapD3 {
 
         this.countriesData = countriesData;
         this.updateCountries(countriesData);
-    }
+    }*/
 
     onMouseOver(event, data, type) {
         this.showTooltip(data, type);
@@ -239,7 +241,7 @@ export default class MapD3 {
 
     updateStations(data) {
         if (!data) return;
-        const { stationsBuffer, projection } = this;
+        const { stationsBuffer, projection} = this;
         const filtered = data.filter(tester(projection));
         const {buffer, thresh} = stationsBuffer.update(filtered, 'StationId');
         filtered.forEach(station=>{
@@ -272,6 +274,17 @@ export default class MapD3 {
             icon.transform(translate(station,projection));
         });
         this.stationIcons = cleanIcons(stationIcons, save);*/
+    }
+
+    getFlag(country) {
+        const { flags } = this;
+
+        let flag = flags.get(country)
+        if (flag && flag.flag_base64) {
+            return flag.flag_base64;
+        }
+
+        return null;
     }
 
     cleanStations() {

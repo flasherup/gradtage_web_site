@@ -4,12 +4,14 @@ import {Col, Row} from "react-bootstrap"
 import {useGetMetricsQuery} from "../../store/services/MetricsService"
 import { useAppSelector } from '../../store/Hooks'
 import {RootState} from "../../store/MainStore"
+import { useGetFlagsQuery } from "../../store/services/FlagService"
 
 const d3Ref: RefObject<SVGSVGElement> = React.createRef<SVGSVGElement>();
 let graph: MapD3 | undefined;
 
 export default function StationsMap() {
-    const {data, error, isLoading} = useGetMetricsQuery('')
+    const {data, error, isLoading} = useGetMetricsQuery('');
+    const { data: flags } = useGetFlagsQuery('');
     const countries = useAppSelector((state: RootState) => state.metrics.Countries)
     const all = useAppSelector((state: RootState) => state.metrics.All)
     useEffect(() => {
@@ -23,11 +25,11 @@ export default function StationsMap() {
     }, []);
 
     useEffect(() => {
-        if (countries && all && graph) {
-            graph.update(countries, all);
+        if (countries && all && graph && flags) {
+            graph.update(countries, all, flags);
         }
 
-    },[countries, all]);
+    },[countries, all, flags]);
     return (
         <Row>
             <Col>

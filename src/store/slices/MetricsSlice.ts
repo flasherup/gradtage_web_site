@@ -1,25 +1,31 @@
 import {createSlice, PayloadAction} from '@reduxjs/toolkit'
 import type {RootState} from '../MainStore'
 import {Metric} from "../services/MetricsService";
+import countriesData from '../../data/countries.json';
 import {
     CUT_DATE_WBH,
-    DAY_MILLISECONDS,
     HOUR_MILLISECONDS,
     HOURS_ACCEPTABLE_GAP,
     HOURS_THRESHOLD
 } from "../../constants";
 
+interface CountryData {
+    Code:string
+    Latitude:number
+    Longitude:number
+}
 
 interface AdvancedMetric{
-    Name: string,
-    Country: string,
-    StationId: string,
-    Latitude: number,
-    Longitude: number,
-    LastUpdate: Date,
-    FirstUpdate: Date,
-    RecordsAll: number,
-    RecordsClean: number,
+    Name: string
+    Country: string
+    CountryCode: string
+    StationId: string
+    Latitude: number
+    Longitude: number
+    LastUpdate: Date
+    FirstUpdate: Date
+    RecordsAll: number
+    RecordsClean: number
     UpdateStatus: number
     RecordsStatus: number
 }
@@ -33,19 +39,19 @@ interface MetricsCountry {
     Name: string
     Records: Status
     Updates: Status
+    Latitude: number
+    Longitude: number
+    Code: string
     Metrics:  AdvancedMetric[]
 }
 
 export interface MetricsState {
-    Countries: Map<string, MetricsCountry>
+    Countries: MetricsCountry[]
     All: AdvancedMetric[]
 }
 
 // Define the initial state using that type
-const initialState: MetricsState = {
-    Countries: new Map<string, MetricsCountry>(),
-    All: []
-}
+const initialState: MetricsState = {} as MetricsState;
 
 export const metricsSlice = createSlice({
     name: 'metrics',
@@ -66,13 +72,15 @@ const preCalculateMetrics = (metrics: Metric[]):AdvancedMetric[]  => {
     now.setDate(now.getDate()-1)
     return metrics.map(metric => {
         const am = metricToAdvanceMetric(metric)
+        const countryData = getCountryData(am.Country);
+        am.CountryCode = countryData.Code;
         am.UpdateStatus = calculateUpdateStatus(now, am.LastUpdate);
         am.RecordsStatus = calculateRecordsStatus(am.LastUpdate, am.RecordsClean);
         return am
     });
 }
 
-const sortByCountry = (metrics: AdvancedMetric[]):Map<string, MetricsCountry>  => {
+const sortByCountry = (metrics: AdvancedMetric[]):MetricsCountry[]  => {
     const res: Map<string, MetricsCountry> = new Map<string, MetricsCountry>()
     //Sort By countries
     let metricsCountry: MetricsCountry;
@@ -83,17 +91,29 @@ const sortByCountry = (metrics: AdvancedMetric[]):Map<string, MetricsCountry>  =
             metricsCountry.Metrics = [];
             metricsCountry.Records = {Normals:0, Issues:0} as Status;
             metricsCountry.Updates = {Normals:0, Issues:0} as Status;
+            const data = getCountryData(metricsCountry.Name);
+            metricsCountry.Code = data.Code;
+            metricsCountry.Latitude = data.Latitude;
+            metricsCountry.Longitude = data.Longitude;
             res.set(metric.Country, metricsCountry)
         } else {
             metricsCountry = res.get(metric.Country) as MetricsCountry
         }
         metricsCountry.Metrics.push(metric)
     })
-    console.log('metricsCountry', res)
-    return res;
+    return Array.from(res, ([name, value]) => (value));
 }
 
-const calculateCountryStatus = (countries: Map<string, MetricsCountry>):Map<string, MetricsCountry> => {
+const getCountryData = (name:string):CountryData => {
+    const data = (<any>countriesData)[name] as CountryData
+    if (!data) {
+       console.warn('Country not found', name);
+       return {} as CountryData;
+    }
+    return data;
+}
+
+const calculateCountryStatus = (countries: MetricsCountry[]):MetricsCountry[] => {
     countries.forEach((country) => {
         country.Metrics.forEach(metric => {
             const { RecordsStatus, UpdateStatus } = metric;

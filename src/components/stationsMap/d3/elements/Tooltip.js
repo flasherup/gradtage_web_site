@@ -28,13 +28,12 @@ export default class Tooltip {
     }
 
     update(data, type) {
-        console.log('type', type)
         if (type === TYPE_COUNTRY) {
             this.updateTitle(data.Name);
             const items = [
-                createItemData('Stations:', data.Raw.Metrics.length),
-                createItemData('Update Issues:', data.Raw.Updates.Issues),
-                createItemData('Records Issues:', data.Raw.Records.Issues),
+                createItemData('Stations:', data.Metrics.length),
+                createItemData('Update Issues:', data.Updates.Issues),
+                createItemData('Records Issues:', data.Records.Issues),
             ]
             this.updateItems(items, 0, 50);
             return;

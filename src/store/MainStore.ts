@@ -3,10 +3,12 @@ import { configureStore } from '@reduxjs/toolkit'
 import { setupListeners } from '@reduxjs/toolkit/query'
 import metricsAPI, {metricsDataProcessMiddleware} from './services/MetricsService'
 import MetricsSlice from './slices/MetricsSlice'
+import flagsAPI from "./services/FlagService";
 
 export const MainStore = configureStore({
     reducer: {
         [metricsAPI.reducerPath]: metricsAPI.reducer,
+        [flagsAPI.reducerPath]: flagsAPI.reducer,
         metrics: MetricsSlice,
     },
 
@@ -15,6 +17,7 @@ export const MainStore = configureStore({
             serializableCheck: false,
         })
             .concat(metricsAPI.middleware)
+            .concat(flagsAPI.middleware)
             .concat(metricsDataProcessMiddleware),
 })
 

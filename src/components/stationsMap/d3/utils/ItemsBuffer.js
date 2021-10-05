@@ -7,8 +7,6 @@ export default class ItemsBuffer {
     update(data, keyAccessor) {
         const { buffer, itemsFabric } = this;
         const {thresh, newbies} = getNewAndThresh(data, buffer, keyAccessor);
-        console.log('thresh', thresh)
-        console.log('newbies', newbies)
         thresh.forEach((item, key)=> {
             buffer.delete(key);
             if (newbies.length > 0) {
@@ -17,7 +15,6 @@ export default class ItemsBuffer {
                 thresh.delete(key);
             }
         })
-        console.log('newbies after', newbies.length)
         newbies.forEach(newbie => {
             buffer.set(newbie[keyAccessor], itemsFabric());
         })
